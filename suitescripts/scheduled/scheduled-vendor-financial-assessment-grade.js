@@ -57,11 +57,11 @@ define(['N/search', 'N/record'], function (search, record) {
 
       if (average >= 0 && average <= 20) {
         grade = 'F';
-      } else if (average >= 21 && average <= 35) {
+      } else if (average > 20 && average <= 35) {
         grade = 'D';
-      } else if (average >= 36 && average <= 60) {
+      } else if (average > 35 && average <= 60) {
         grade = 'C';
-      } else if (average >= 61 && average <= 80) {
+      } else if (average > 60 && average <= 80) {
         grade = 'B';
       } else if (average > 80) {
         grade = 'A';
