@@ -1,0 +1,117 @@
+hr {
+    border: 0;
+    height: 1px;
+    background: #DDDDDD;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+.card {
+    border: 1px solid #DDDDDD;
+    border-radius: .35rem;
+    margin-right: 15px;
+    margin-top: 10px;
+}
+
+.card-title {
+    font-size: 16px;
+    border-bottom: 1px solid #DDDDDD;
+    font-weight: 800;
+    padding: 12px;
+}
+
+.card-text {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 12px;
+}
+
+.table-bordered {
+    border: 1px solid #EEEEEE;
+    border-collapse: collapse;
+}
+
+.table-header {
+    font-size: 14px;
+    font-weight: 800;
+    padding: 8px;
+}
+
+.table-text {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px;
+} 
+
+.sub-block-text {
+    font-size: .91em;
+    font-weight: 500;
+    border: 1px solid #DDDDDD;    
+    border-radius: .45rem;  
+    border-style: dashed;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    padding: 12px;
+}
+
+.btn-danger {
+    background-color: #FFFFFF;
+    border: 1px solid #dc3545;
+    border-radius: .25rem;
+    padding: 8px;
+    text-align: center;
+    width: 300px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: #dc3545;
+}
+
+.btn-standard {
+    background-color: #FFFFFF;
+    border: 1px solid #6c757d;
+    border-radius: .25rem;
+    padding: 6px;
+    text-align: center;
+    width: 350px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6c757d;
+}
+
+.btn-standard:hover {
+    background-color: #6c757d;
+    color: #FFFFFF;
+}
+
+.btn-danger:hover {
+    background-color: #dc3545;
+    color: #FFFFFF;
+}
+
+.btn-success {
+    background-color: #d1e7dd;
+    border: 1px solid #badbcc;
+    border-radius: .25rem;
+    padding: 8px;
+    text-align: center;
+    width: 300px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f5132;
+}
+
+.giant-alert {
+    position: relative;
+    padding: .75rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: .25rem;    
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;    
+    font-size: 24px;
+    font-weight: 800;
+}
