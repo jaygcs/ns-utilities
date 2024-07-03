@@ -95,11 +95,17 @@ function(query, search, record, file) {
                 });  
 
                 rm_cost = (rm_total_cost / assembly_quantity);                                    
-            }                                                            
+            } 
+            
+            var avg_cost = result.values['custrecord_gcs_ps_item_part.averagecost'];
+            var key = result.values['custrecord_gcs_ps_item_part'].value + '_' + result.values['custrecord_gcs_ps_item_location'].value;
+            if(cost_map[key]) {
+                avg_cost = cost_map[key];
+            }
 
             ps_item.setValue({
                 fieldId: 'custrecord_gcs_ps_rate',
-                value: (po_rate) ? po_rate : result.values['custrecord_gcs_ps_item_part.averagecost']
+                value: (po_rate) ? po_rate : avg_cost
             });
 
             ps_item.setValue({
