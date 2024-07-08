@@ -70,7 +70,7 @@ function(query, search, record, dayjs) {
             'customrecord_gcs_ps_item.custrecord_gcs_ps_item_prod_date_adj AS date_production_adjusted, ' +
             'customrecord_gcs_ps_item.custrecord_gcs_ps_item_prod_date_actual AS date_production_actual, ' +
             'FROM customrecord_gcs_ps_item ' +          
-            'WHERE custrecord_gcs_ps_item_project = ?';
+            'WHERE custrecord_gcs_ps_item_project = ? AND customrecord_gcs_ps_item.custrecord_gcs_ps_item_quantity_actual > 0';
 
             var results = query.runSuiteQL({ query: sql, params: [ result.id ]  }).asMappedResults();            
             results.forEach(function(result) {              
@@ -127,7 +127,11 @@ function(query, search, record, dayjs) {
                
                 if(item.date_site_arrival && dates.indexOf(item.date_site_arrival) == -1) {
                     dates.push(item.date_site_arrival);   
-                }                               
+                }   
+                
+                if(item.date_production && dates.indexOf(item.date_production) == -1) {
+                    dates.push(item.date_production);   
+                }   
 
                 if(!bom_items[item.bom_id]) {
                     bom_items[item.bom_id] = { bom_id: item.bom_id, part: item.part, part_description: item.part_description, commodity_category: item.commodity_category, change_order_number: item.change_order_number, project: item.project_name, project_status: item.project_status, mps: [], ps: [], ds: [] }
@@ -168,7 +172,7 @@ function(query, search, record, dayjs) {
             var end_week = dayjs(dates[dates.length - 1]);
 
             // limit just to be safe 
-            for (var i = 0; i < 150; i++) {
+            for (var i = 0; i < 200; i++) {
 
                 weeks.push({
                     start: start_week,
@@ -205,14 +209,17 @@ function(query, search, record, dayjs) {
             });  
             
             // for each bom item cumulate qts under dates
-            var total_scores = [];
+            var total_scores_delivery = [];
+            var total_scores_production = [];
+            
             var score_breakdown = {};
            
             Object.keys(class_groups).forEach(function(class_header) {
 
                 if(class_header == 'Electronics') { return; }
 
-                var commodity_scores = [];   
+                var commodity_scores_delivery = [];   
+                var commodity_scores_production = [];
 
                 for(var i = 0; i < class_groups[class_header].length; i++) {                                               
                     
@@ -226,54 +233,75 @@ function(query, search, record, dayjs) {
                         if(d.bom_id == bom_id) {                         
                             bom_item.ds.push(d);
                         }
-                    });                   
+                    });   
+                    
+                    ps.forEach(function(p) {
+                        if(p.bom_id == bom_id) {
+                            bom_item.ps.push(p);
+                        }
+                    })
 
                     // sort by data set
-                    var mps = bom_item.mps.sort(function(a, b) {
+                    var mps_delivery = bom_item.mps.sort(function(a, b) {
                         return dayjs(a.date_site_arrival).valueOf() - dayjs(b.date_site_arrival).valueOf();
                     });   
                     
-                    var comparison = bom_item.ds.sort(function(a, b) {
+                    var comparison_delivery = bom_item.ds.sort(function(a, b) {
                         return dayjs(a.date_site_arrival).valueOf() - dayjs(b.date_site_arrival).valueOf();
                     });         
+
+                    var mps_production = bom_item.mps.sort(function(a, b) {
+                        return dayjs(a.date_production).valueOf() - dayjs(b.date_production).valueOf();
+                    });   
+                    
+                    var comparison_production = bom_item.ps.sort(function(a, b) {
+                        return dayjs(a.date_production).valueOf() - dayjs(b.date_production).valueOf();
+                    });       
                   
-                    var bom_total = 0;
-                    for(var j = 0; j < mps.length; j++) {                                                     
-                        bom_total += mps[j].quantity;                                                                
+                    var bom_total_delivery = 0;
+                    for(var j = 0; j < mps_delivery.length; j++) {                                                     
+                        bom_total_delivery += mps[j].quantity;                                                                
                     }
 
-                    var scores = [];                    
+                    var bom_total_production = 0;
+                    for(var j = 0; j < mps_production.length; j++) {                                                     
+                        bom_total_production += mps_production[j].quantity;                                                                
+                    }                    
+
+                    var scores_delivery = [];  
+                    var scores_production = [];                  
                     
                     var delivered = false;
+                    var produced = false;
                     weeks.forEach(function(w) {
                         
                         if(w.end.valueOf() > view_start_week.valueOf()) {                            
 
-                            var project_total = 0;
-                            var week_total = 0;
-                            comparison.forEach(function(c) {
+                            var project_total_delivery = 0;
+                            var week_total_delivery = 0;
+                            comparison_delivery.forEach(function(c) {
 
                                 if(dayjs(c.date_site_arrival).valueOf() <= w.end.valueOf()) {
-                                    project_total += c.quantity_actual;
+                                    project_total_delivery += c.quantity_actual;
                                 }
 
                                 if(dayjs(c.date_site_arrival).valueOf() >= w.start.valueOf() && dayjs(c.date_site_arrival).valueOf() <= w.end.valueOf()) {
-                                    week_total += c.quantity_actual;
+                                    week_total_delivery += c.quantity_actual;
                                 }
                             });                            
 
-                            // get % compvare color code                            
-                            var mps_total = 0;                                                       
-                            for(var i = 0; i < mps.length; i++) {
+                            // get % 
+                            var mps_total_delivery = 0;                                                       
+                            for(var i = 0; i < mps_delivery.length; i++) {
                                 
-                                if(dayjs(mps[i].date_site_arrival).valueOf() <= w.end.valueOf()) {
-                                    mps_total += mps[i].quantity;
+                                if(dayjs(mps_delivery[i].date_site_arrival).valueOf() <= w.end.valueOf()) {
+                                    mps_total_delivery += mps_delivery[i].quantity;
                                 }                                                                  
                             }
 
-                            if(mps_total > 0 && !delivered) {                               
+                            if(mps_total_delivery > 0 && !delivered) {                               
 
-                                var p_compare = (project_total * 100) / mps_total;        
+                                var p_compare = (project_total_delivery * 100) / mps_total_delivery;        
                                 
                                 if(!p_compare) { p_compare = '' }
                                 else if(p_compare > 100) {
@@ -281,67 +309,162 @@ function(query, search, record, dayjs) {
                                 }
                                 p_compare = Math.round(p_compare);
                                                                 
+                                if(dayjs().valueOf() < w.end.valueOf()) { 
+                                }
+                                else {
+                                    scores_delivery.push(p_compare);                                                        
+                                }
+                            }                                                         
+
+                            if(mps_total_delivery >= bom_total_delivery) { delivered = true; }
+
+                            // production
+                            var project_total_production = 0;
+                            var week_total_production = 0;
+                            comparison_production.forEach(function(c) {
+
+                                if(dayjs(c.date_production_actual).valueOf() <= w.end.valueOf()) {
+                                    project_total_production += c.quantity_actual;
+                                }
+
+                                if(dayjs(c.date_production_actual).valueOf() >= w.start.valueOf() && dayjs(c.date_production_actual).valueOf() <= w.end.valueOf()) {
+                                    week_total_production += c.quantity_actual;
+                                }
+                            });                            
+
+                            // get % 
+                            var mps_total_production = 0;                                                       
+                            for(var i = 0; i < mps_production.length; i++) {
+                                
+                                if(dayjs(mps_production[i].date_production).valueOf() <= w.end.valueOf()) {
+                                    mps_total_production += mps_production[i].quantity;
+                                }                                                                  
+                            }
+
+                            if(mps_total_production > 0 && !produced) {    
+
+                                var p_compare = (project_total_production * 100) / mps_total_production;        
+                                
+                                if(!p_compare) { p_compare = '' }
+                                else if(p_compare > 100) {
+                                    p_compare = 100;
+                                }
+                                p_compare = Math.round(p_compare);
+                                 
                                 if(dayjs().valueOf() < w.end.valueOf()) {
-                                          
                                 }
                                 else {
 
-                                    scores.push(p_compare);                                                        
+                                    scores_production.push(p_compare);                                                        
                                 }
                             }                            
 
-                            if(mps_total >= bom_total) { delivered = true; }
+                            if(mps_total_production >= bom_total_production) { 
+                                produced = true; 
+                            }                            
                         }
-                    });                             
+                    });   
+                    
+                    if(scores_delivery.length) {
 
-                    if(scores.length) {
-
-                        // show score column
                         var total_score = 0;
-                        scores.forEach(function(s) {
+                        scores_delivery.forEach(function(s) {
                             total_score += s;
                         });
 
-                        var item_score = Math.round(total_score / scores.length);
+                        var item_score = Math.round(total_score / scores_delivery.length);
 
-                        total_scores.push(item_score);
-                        commodity_scores.push(item_score);                   
+                        total_scores_delivery.push(item_score);
+                        commodity_scores_delivery.push(item_score);                   
+                    }                      
+
+                    if(scores_production.length) {
+
+                        var total_score = 0;
+                        scores_production.forEach(function(s) {
+                            total_score += s;
+                        });
+
+                        var item_score = Math.round(total_score / scores_production.length);
+
+                        total_scores_production.push(item_score);
+                        commodity_scores_production.push(item_score);                   
                     }                                                           
                 }
                 
-                if(commodity_scores.length) {
+                if(commodity_scores_delivery.length) {
 
                     var commodity_score_sum = 0;
-                    commodity_scores.forEach(function(s) {
+                    commodity_scores_delivery.forEach(function(s) {
                         commodity_score_sum += s;
                     });
 
-                    var commodity_score = Math.round(commodity_score_sum / commodity_scores.length); 
+                    var commodity_score = Math.round(commodity_score_sum / commodity_scores_delivery.length); 
+
+                    if(!score_breakdown[class_header]) {
+                        score_breakdown[class_header] = {
+                            production: 0,
+                            delivery: 0
+                        }
+                    }
                     
-                    score_breakdown[class_header] = commodity_score;
+                    score_breakdown[class_header].delivery = commodity_score;
+                }            
+
+                if(commodity_scores_production.length) {
+
+                    log.audit('CSP', commodity_scores_production);
+
+                    var commodity_score_sum = 0;
+                    commodity_scores_production.forEach(function(s) {
+                        commodity_score_sum += s;
+                    });
+
+                    var commodity_score = Math.round(commodity_score_sum / commodity_scores_production.length); 
+                    
+                    if(!score_breakdown[class_header]) {
+                        score_breakdown[class_header] = {
+                            production: 0,
+                            delivery: 0
+                        }
+                    }
+
+                    score_breakdown[class_header].production = commodity_score;
                 }                
             });
 
+            log.audit('total scores delivery', total_scores_delivery);
+            log.audit('total scores production', total_scores_production);
+
             var total_score_sum = 0;
-            total_scores.forEach(function(s) {
+            total_scores_delivery.forEach(function(s) {
                 total_score_sum += s;
             });
 
-            var score = Math.round(total_score_sum / total_scores.length);          
+            var score_delivery = Math.round(total_score_sum / total_scores_delivery.length);        
+            
+            total_score_sum = 0;
+            total_scores_production.forEach(function(s) {
+                total_score_sum += s;
+            });
+
+            var score_production = Math.round(total_score_sum / total_scores_production.length);             
 
             var p = record.load({
                 type: record.Type.JOB,
                 id: result.id
             });
 
-            p.setValue({ fieldId: 'custentity_gcs_otscore_delivery', value: score });
-            p.setValue({ fieldId: 'custentity_gcs_ontime_score_cs', value: JSON.stringify(score_breakdown)});
+            p.setValue({ fieldId: 'custentity_gcs_otscore_delivery', value: score_delivery });
+            p.setValue({ fieldId: 'custentity_gcs_otscore_production', value: score_production });
+            p.setValue({ fieldId: 'custentity_gcs_ontime_score_cs', value: JSON.stringify(score_breakdown)});            
+        
             p.save();
            
         }
         catch(e) {                                
             log.audit('Map Error on', result);
-            log.audit('Exception', e);
+            log.audit('Error of previous', e);
         }
     }
 

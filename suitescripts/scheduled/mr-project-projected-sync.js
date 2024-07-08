@@ -7,10 +7,12 @@ define([
     'N/query', 
     'N/search', 
     'N/record', 
+    'N/file',
     'SuiteScripts/GCS/purchase-orders',
+    'SuiteScripts/GCS/vessels'
 ],
 
-function(query, search, record, purchase_orders) {
+function(query, search, record, file, purchase_orders, vessels) {
 
     function getInputData() {
 
@@ -56,15 +58,24 @@ function(query, search, record, purchase_orders) {
             p.setValue({ fieldId: 'custentity_gcs_p_budget_os', value: total_budget_ocean });
             p.setValue({ fieldId: 'custentity_gcs_p_budget_lm', value: total_budget_last_mile });
 
-            // get ps and projections
-            var sql = 'SELECT custrecord_gcs_ps_item_bom_item AS bom_id, ' +
+            // get ps and projections            
+            var sql = 'SELECT custrecord_gcs_ps_item_bom_item AS bom_id, BUILTIN.DF(custrecord_gcs_ps_item_part) AS part_name, custrecord_gcs_ps_item_part AS part_id, custrecord_gcs_ps_item_location AS location_id, ' +
                 'custrecord_gcs_ps_item_quantity AS quantity, custrecord_gcs_ps_rate AS po_rate, custrecord_gcs_ps_rm_cost AS rm_cost, ' +                    
                 'custrecord_gcs_ps_item_po AS po_id, BUILTIN.DF(custrecord_gcs_ps_item_po) as po_number, ' +
                 'custrecord_gcs_ps_item_wo AS wo_id, BUILTIN.DF(custrecord_gcs_ps_item_wo) as wo_number ' +
                 'FROM customrecord_gcs_ps_item ' +          
                 'WHERE custrecord_gcs_ps_item_project = ?';
 
-            var ps = query.runSuiteQL({ query: sql, params: [ result.id ]  }).asMappedResults();     
+            var ps = query.runSuiteQL({ query: sql, params: [ result.id ]  }).asMappedResults();   
+            
+            // load avg cost by location map            
+            var cost_map = {}
+            try {
+                cost_map = JSON.parse(file.load({ id: 'SuiteScripts/GCS/cache/avg-cost-location.json' }).getContents());
+            }
+            catch(e) {
+                log.audit('Fail', e);
+            }
             
             var total_material_projections = 0;
             var breakdown = [];
@@ -78,6 +89,15 @@ function(query, search, record, purchase_orders) {
                 var rate = r.po_rate;
                 if(r.rm_cost) {
                     rate = r.po_rate + r.rm_cost;
+                }
+
+                if(!r.po_id) {
+
+                    // override with avg cost
+                    var key = ps.part_id + '_' + ps.location_id;
+                    if(cost_map[key]) {
+                        rate = cost_map[key];
+                    }                    
                 }
 
                 var total = r.quantity * rate
@@ -136,7 +156,20 @@ function(query, search, record, purchase_orders) {
                 total_logistics_projections += Number(unique_costs[oc].total);
             });
 
+            var vessel_costs = vessels.getProjectCost(result.id);
+            vessel_costs.forEach(function(v) {
+
+                breakdown.push({
+                    item: 'Vessel Cost - ' + v.name,
+                    total: Number(v.cost_per_lb * v.total_weight)
+                });                     
+
+                total_logistics_projections += Number(v.cost_per_lb * v.total_weight);
+            });           
+
             p.setValue({ fieldId: 'custentity_gcs_p_po_logistics', value: total_logistics_projections });     
+
+            p.setValue({ fieldId: 'custentity_gcs_p_po_material_breakdown', value: JSON.stringify(breakdown) });
 
             p.save();
 
