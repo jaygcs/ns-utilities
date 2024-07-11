@@ -8,11 +8,11 @@ define([
     'N/search', 
     'N/record', 
     'N/file',
-    'SuiteScripts/GCS/purchase-orders',
-    'SuiteScripts/GCS/vessels'
+    'SuiteScripts/GCS/project-expenses',
+    'SuiteScripts/GCS/dayjs.min'
 ],
 
-function(query, search, record, file, purchase_orders, vessels) {
+function(query, search, record, file, project_expenses, dayjs) {
 
     function getInputData() {
 
@@ -109,42 +109,8 @@ function(query, search, record, file, purchase_orders, vessels) {
 
             p.setValue({ fieldId: 'custentity_gcs_p_po_material', value: total_material_projections });     
             
-            // logistics
-            var unique_costs = {};
-            var po_data = purchase_orders.get(result.id);            
-            var purchase_order_lines = po_data.lines;
-            purchase_order_lines.forEach(function(l) {
-
-                try {
-                
-                    if(l.item_name.match(/^Note/)) { return; }
-                    if(l.item_name.match(/Processing Charges/)) { return; }
-                    if(l.item_name.match(/Pull Test/)) { return; }
-                    if(l.rate == 0) { return; }
-
-                    if(l.accountinglinetype != 'ASSET') {
-
-                        if(!unique_costs[l.item_name]) {
-                            unique_costs[l.item_name] = {
-                                total: 0,
-                                lines: []
-                            };
-                        }
-
-                        unique_costs[l.item_name].total += Number(l.quantity * l.rate);
-                        unique_costs[l.item_name].lines.push({
-                            po_number: l.name,
-                            po_id: l.id,
-                            date: l.transaction_date,
-                            vendor: l.vendor_name,
-                            item: l.item_name,
-                            quantity: l.quantity,
-                            rate: l.rate
-                        });
-                    }
-                }
-                catch(e) {}
-            });  
+            // logistics / expenses
+            var unique_costs = project_expenses.get(result.id);          
             
             var total_logistics_projections = 0;
             var logistics = Object.keys(unique_costs).sort();
@@ -165,12 +131,70 @@ function(query, search, record, file, purchase_orders, vessels) {
                 });                     
 
                 total_logistics_projections += Number(v.cost_per_lb * v.total_weight);
-            });           
+            });               
 
             p.setValue({ fieldId: 'custentity_gcs_p_po_logistics', value: total_logistics_projections });     
-
             p.setValue({ fieldId: 'custentity_gcs_p_po_material_breakdown', value: JSON.stringify(breakdown) });
+            
+            // get percent complete
+            sql = 'SELECT customrecord_gcs_mps_item.id AS mps_id, ' +
+            'customrecord_gcs_mps_item.custrecord_gcs_mps_item_bom_item AS bom_id, ' +
+            'BUILTIN.DF(customrecord_gcs_mps_item.custrecord_gcs_mps_item_part) AS part, ' +
+            'customrecord_gcs_mps_item.custrecord_gcs_mps_item_quantity AS quantity, ' +
+            'customrecord_gcs_mps_item.custrecord_gcs_mps_item_site_date AS date_site_arrival ' +
+            'FROM customrecord_gcs_mps_item ' + 
+            'WHERE custrecord_gcs_mps_item_project = ? ';            
+            
+            var mps = query.runSuiteQL({ query: sql, params: [ result.id ]}).asMappedResults();
 
+            sql = 'SELECT BUILTIN.DF(customrecord_gcs_ds_item.custrecord_gcs_ds_item_part) AS part, ' +
+            'customrecord_gcs_ds_item.custrecord_gcs_ds_item_quantity_actual AS quantity_actual, ' +
+            'customrecord_gcs_ds_item.custrecord_gcs_ds_item_site_date AS date_site_arrival ' +
+            'FROM customrecord_gcs_ds_item ' + 
+            'WHERE custrecord_gcs_ds_item_project = ? ';     
+            
+            var ds = query.runSuiteQL({ query: sql, params: [ result.id ]}).asMappedResults();
+
+            var delivery_dates = [];
+
+            // get stats by bom item
+            var bom_items = {};
+            mps.forEach(function(d) {         
+                if(!bom_items[d.part]) {
+                    bom_items[d.part] = {
+                        delivery_planned: 0,
+                        delivery_actual: 0
+                    };
+                }
+
+                bom_items[d.part].delivery_planned += d.quantity;
+
+                delivery_dates.push(d.date_site_arrival);
+            });
+
+            ds.forEach(function(d) {    
+
+                if(bom_items[d.part]) {
+
+                    bom_items[d.part].delivery_actual += (d.quantity_actual) ? d.quantity_actual : 0;
+
+                    if(d.date_site_arrival) {
+                        delivery_dates.push(d.date_site_arrival);
+                    }
+                }
+            });            
+
+            delivery_dates = delivery_dates.sort(function(a, b) {
+                return dayjs(a).valueOf() - dayjs(b).valueOf();
+            });
+
+            var avg_total = 0;
+            Object.keys(bom_items).forEach(function(bom_item) {
+                avg_total += (bom_items[bom_item].delivery_actual * 100) / bom_items[bom_item].delivery_planned
+            });
+
+            var percent_delivered = Math.round(avg_total / Object.keys(bom_items).length);
+            p.setValue({ fieldId: 'custentity_gcs_p_percent_delivered', value: percent_delivered });
             p.save();
 
             // update bom
