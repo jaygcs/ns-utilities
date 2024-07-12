@@ -413,8 +413,6 @@ function(query, search, record, dayjs) {
 
                 if(commodity_scores_production.length) {
 
-                    log.audit('CSP', commodity_scores_production);
-
                     var commodity_score_sum = 0;
                     commodity_scores_production.forEach(function(s) {
                         commodity_score_sum += s;
@@ -432,9 +430,6 @@ function(query, search, record, dayjs) {
                     score_breakdown[class_header].production = commodity_score;
                 }                
             });
-
-            log.audit('total scores delivery', total_scores_delivery);
-            log.audit('total scores production', total_scores_production);
 
             var total_score_sum = 0;
             total_scores_delivery.forEach(function(s) {

@@ -85,18 +85,27 @@ define([ 'N/query', 'SuiteScripts/GCS/purchase-orders' ], function(query, purcha
             });
 
             // expenses
-            sql = 'SELECT transaction.id, transaction.trandate AS transaction_date, transaction.tranid AS name, vendor.entityid AS vendor_name, account.acctnumber, ' +
+            sql = 'SELECT transaction.id, transaction.trandate AS transaction_date, transaction.tranid AS name, vendor.entityid AS vendor_name, account.acctnumber, transactionLine.id AS line_id, ' +
             'BUILTIN.DF(transaction.custbody_nsps_commodity_manager) AS cm_user, TransactionAccountingLine.amount AS amount, BUILTIN.DF(TransactionAccountingLine.account) AS account, ' +
             'FROM transaction LEFT OUTER JOIN vendor ON transaction.entity = vendor.id ' +
-            'LEFT OUTER JOIN transactionline ON transaction.id = transactionline.transaction ' +
-            'LEFT OUTER JOIN TransactionAccountingLine ON TransactionAccountingLine.transaction = transactionLine.transaction ' +
-            'LEFT OUTER JOIN account ON TransactionAccountingLine.account = account.id ' +
+            'RIGHT JOIN transactionline ON transaction.id = transactionline.transaction ' +
+            'RIGHT JOIN TransactionAccountingLine ON TransactionAccountingLine.transaction = transactionLine.transaction ' +
+            'RIGHT JOIN account ON TransactionAccountingLine.account = account.id ' +
             'WHERE transaction.type = ? AND transactionline.entity = ? AND transactionline.createdfrom IS NULL AND amount > 0 AND account.acctnumber LIKE \'7%\' ' + 
             'ORDER BY transaction.tranid';
 
             var data = query.runSuiteQL({ query: sql, params: [ 'VendBill', project_id ] }).asMappedResults();
 
+            var logged = [];
             data.forEach(function(l) {
+
+                var key = l.id + '_' + l.line_id;
+                if(logged.indexOf(key) == -1) {
+                    logged.push(key);
+                }
+                else {
+                    return;
+                }
                                                     
                 if(!unique_costs[l.account]) {
                     unique_costs[l.account] = {
@@ -119,6 +128,67 @@ define([ 'N/query', 'SuiteScripts/GCS/purchase-orders' ], function(query, purcha
             });                                  
             
             return unique_costs;
+
+            /*
+            budget_items = {
+                ['Ocean Shipping']: { 
+                    budget_field: 'budget_ocean_shipping',
+                    total: 0,
+                    lines: []
+                },
+                ['Duties']: {
+                    budget_field: 'budget_duties',
+                    total: 0,
+                    lines: []
+                },
+                ['Last Mile']: {
+                    budget_field: 'budget_last_mile',
+                    total: 0,
+                    lines: []
+                },
+                ['Field Ops / Remediation']: {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                },
+                ['Bond BG Fees']: {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                },
+                ['Other Costs']: {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                }                   
+            };
+
+            bill_charges.forEach(oc => {
+
+                let key = '';
+
+                if(this.state.bill_items[oc].class_name.match(/Remediation/)) {
+                    key = 'Field Ops / Remediation';
+                }
+                else if(this.state.bill_items[oc].class_name.match(/(Last Mile|Storage|Air)/)) {
+                    key = 'Last Mile';
+                }
+                else if(this.state.bill_items[oc].class_name.match(/Ocean/)) {
+                    key = 'Ocean Shipping';
+                }
+                else if(this.state.bill_items[oc].class_name.match(/Duties/)) {
+                    key = 'Duties';
+                }      
+                else if(this.state.bill_items[oc].class_name.match(/Bond BG Fees/)) {
+                    key = 'Bond BG Fees';
+                } 
+                if(!key) { key = 'Other Costs'; }               
+
+                budget_items[key].total += this.state.bill_items[oc].total;
+                budget_items[key].lines.push(...this.state.bill_items[oc].lines); 
+            });
+
+            */
         }
         
     } 
