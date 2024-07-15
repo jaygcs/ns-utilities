@@ -40,7 +40,7 @@ define(['N/search', 'N/record'], function (search, record) {
       }); 
       var totalFieldsWithData = validScores.reduce(function(sum, score) {
          return sum + parseFloat(score); }, 0); 
-      var average = validScores.length > 0 ? totalFieldsWithData / validScores.length : 0; 
+      var average = validScores.length > 1 ? totalFieldsWithData / validScores.length : 0; 
 
       // if (!isNaN(failureScore)) {
       //   average += failureScore;
