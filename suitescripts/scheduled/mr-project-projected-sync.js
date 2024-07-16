@@ -9,10 +9,11 @@ define([
     'N/record', 
     'N/file',
     'SuiteScripts/GCS/project-expenses',
+    'SuiteScripts/GCS/vessels',
     'SuiteScripts/GCS/dayjs.min'
 ],
 
-function(query, search, record, file, project_expenses, dayjs) {
+function(query, search, record, file, project_expenses, vessels, dayjs) {
 
     function getInputData() {
 
@@ -109,19 +110,76 @@ function(query, search, record, file, project_expenses, dayjs) {
 
             p.setValue({ fieldId: 'custentity_gcs_p_po_material', value: total_material_projections });     
             
-            // logistics / expenses
-            var unique_costs = project_expenses.get(result.id);          
-            
-            var total_logistics_projections = 0;
-            var logistics = Object.keys(unique_costs).sort();
-            logistics.forEach(function(oc) {
-                breakdown.push({
-                    item: oc,
-                    total: unique_costs[oc].total
-                });        
-                total_logistics_projections += Number(unique_costs[oc].total);
-            });
+            // logistics / expenses      
+                           
+            var budget_items = {
+                'Ocean Shipping': { 
+                    budget_field: 'custentity_gcs_p_projected_ocean',
+                    total: 0,
+                    lines: []
+                },
+                'Duties': {
+                    budget_field: 'custentity_gcs_p_projected_duties',
+                    total: 0,
+                    lines: []
+                },
+                'Last Mile': {
+                    budget_field: 'custentity_gcs_p_projected_last_mile',
+                    total: 0,
+                    lines: []
+                },
+                'Field Ops / Remediation': {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                },
+                'Bond BG Fees': {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                },
+                'Other Costs': {
+                    budget_field: '',
+                    total: 0,
+                    lines: []
+                }                   
+            };
 
+            var unique_costs = project_expenses.get(result.id);    
+            var items = Object.keys(unique_costs)            
+
+            items.forEach(function(item) {
+
+                var key = '';
+
+                if(unique_costs[item].class_name) {
+                    if(unique_costs[item].class_name.match(/Remediation/)) {
+                        key = 'Field Ops / Remediation';
+                    }
+                    else if(unique_costs[item].class_name.match(/(Last Mile|Storage|Air)/)) {
+                        key = 'Last Mile';
+                    }
+                    else if(unique_costs[item].class_name.match(/Ocean/)) {
+                        key = 'Ocean Shipping';
+                    }
+                    else if(unique_costs[item].class_name.match(/Duties/)) {
+                        key = 'Duties';
+                    }      
+                    else if(unique_costs[item].class_name.match(/Bond BG Fees/)) {
+                        key = 'Bond BG Fees';
+                    } 
+                }
+                if(!key) { key = 'Other Costs'; }               
+
+                budget_items[key].total += unique_costs[item].total;
+
+                breakdown.push({
+                    item: item,
+                    total: unique_costs[item].total
+                });
+            });                                  
+
+            // add vessel costs to open shipping
             var vessel_costs = vessels.getProjectCost(result.id);
             vessel_costs.forEach(function(v) {
 
@@ -130,12 +188,20 @@ function(query, search, record, file, project_expenses, dayjs) {
                     total: Number(v.cost_per_lb * v.total_weight)
                 });                     
 
-                total_logistics_projections += Number(v.cost_per_lb * v.total_weight);
+                budget_items['Ocean Shipping'].total += Number(v.cost_per_lb * v.total_weight);
             });               
 
-            p.setValue({ fieldId: 'custentity_gcs_p_po_logistics', value: total_logistics_projections });     
+            p.setValue({ fieldId: 'custentity_gcs_p_po_logistics', value: 0 });     
             p.setValue({ fieldId: 'custentity_gcs_p_po_material_breakdown', value: JSON.stringify(breakdown) });
-            
+
+            var cs = Object.keys(budget_items);
+            cs.forEach(function(oc) {
+               
+                if(budget_items[oc].budget_field) {
+                    p.setValue({ fieldId: budget_items[oc].budget_field, value: budget_items[oc].total });     
+                }
+            });
+
             // get percent complete
             sql = 'SELECT customrecord_gcs_mps_item.id AS mps_id, ' +
             'customrecord_gcs_mps_item.custrecord_gcs_mps_item_bom_item AS bom_id, ' +
@@ -207,9 +273,7 @@ function(query, search, record, file, project_expenses, dayjs) {
                         custrecord_gcs_bom_item_pmc: bom_updates[b]
                     }
                 });
-            });
-
-           
+            });           
         }
         catch(e) {                                
             log.audit('Map Error on', result);
