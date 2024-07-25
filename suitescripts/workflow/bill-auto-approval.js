@@ -12,7 +12,8 @@
 
             var item_id = bill.getSublistValue({ sublistId: 'item', fieldId: 'item', line: 0 });                  
             var rate = bill.getSublistValue({ sublistId: 'item', fieldId: 'rate', line: 0 });                  
-            var quantity = bill.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: 0 });                                                                     
+            var quantity = bill.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: 0 });    
+            var packing_list = bill.getSublistValue({ sublistId: 'item', fieldId: 'custcol_gcs_packing_list_num', line: 0 });                                                                    
 
             // match against po
             var po = record.load({
@@ -23,7 +24,26 @@
             // do we have the same item id and rate with quantity unbilled
             var checked = false;
             for(var i = 0; i < po.getLineCount({ sublistId: 'item' }); i++) {
-                if(po.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i }) == item_id) {
+
+                var found = false;
+
+                if(po.getSublistValue({ sublistId: 'item', fieldId: 'custcol_gcs_packing_list_num', line: i })) {
+
+                    // need to match based on PL and item.
+                    if(
+                        po.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i }) == item_id &&
+                        po.getSublistValue({ sublistId: 'item', fieldId: 'custcol_gcs_packing_list_num', line: i }) == packing_list
+                    ) {  
+                        
+                        found = true;
+                    }
+                }
+                else if(po.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i }) == item_id) {
+
+                    found = true;
+                }
+
+                if(found) {
 
                     var remaining = po.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i }) - po.getSublistValue({ sublistId: 'item', fieldId: 'quantitybilled', line: i });
                     if(quantity > (remaining + 1)) {
@@ -62,6 +82,16 @@
             var message = [];
     
             var bill = context.newRecord;
+
+            // make sure we have an item
+            try {
+                bill.getSublistValue({ sublistId: 'item', fieldId: 'item', line: 0 }); 
+            }
+            catch(e) {
+                message.push('No line items found');
+                log.error('No line items found', bill.getValue('tranid'));
+                return;
+            }
 
             // load vendor to check type 
             var vendor = record.load({
@@ -199,13 +229,9 @@
                     message.push('No packing list entered');
                 }
 
-                if(global_approve) {
+                if(global_approve) {                    
 
-                    // first check to see if we are in the same month now
-                    
-                    var today = new Date();
-                    var bill_date = new Date(bill.getValue('trandate'));
-
+                    /*
                     if(today.getMonth() > bill_date.getMonth()) {
 
                         // this needs to be manually approved
@@ -216,31 +242,30 @@
 
                         message.push('All Lines Approved');
                     }
+                    */
 
-                    var bill_date_text = bill_date.getMonth() + '/' + bill_date.getDate() + '/' + bill_date.getFullYear();
-                    log.audit('sql', 'SELECT * from accountingperiod WHERE startdate <= \'' + bill_date_text + '\' and enddate >= \'' + bill_date_text + '\' and isposting = \'T\'')
-                                        
-
-                    // make sure we are not in a locked period
-                    /*
+                    // make sure we are not in a locked period  
                     var bill_date = new Date(bill.getValue('trandate'));
+
                     var bill_date_text = bill_date.getMonth() + '/' + bill_date.getDate() + '/' + bill_date.getFullYear();
+                    //log.error('sql for ' + bill.getValue('postingperiod'), 'SELECT * from accountingperiod WHERE startdate <= \'' + bill_date_text + '\' and enddate >= \'' + bill_date_text + '\' and isposting = \'T\'')                                    
 
                     var sql = 'SELECT * from accountingperiod WHERE startdate <= \'' + bill_date_text + '\' and enddate >= \'' + bill_date_text + '\' and isposting = ?';
                     var results = query.runSuiteQL({ query: sql, params: [ 'T' ] }).asMappedResults();  
                     if(results && results[0].aplocked == 'T' || results[0].closed == 'T') {
 
+                        // find active period
+                        var sql = 'SELECT * from accountingperiod WHERE isposting = ? AND aplocked = ? order by id';
+                        var results = query.runSuiteQL({ query: sql, params: [ 'T', 'F' ] }).asMappedResults();  
+                        bill.setValue({ fieldId: 'postingperiod', value: results[0].id });
 
-                        // this needs to be manually approved
-                        message = [];
-                        message.push('Ready for approval but bill date is in a closed period (' + results[0].periodname + '). Please manually approve and ensure correct Posting Period.');
+                        log.error('Posting adj', 'Adjusting posting period to ' + results[0].periodname);
+
+                        //message = [];
+                        //message.push('* Ready for approval but bill date is in a closed period (' + results[0].periodname + '). Please manually approve and ensure correct Posting Period.');
                     }
-                    else {
-
-                        message.push('All Lines Approved');
-                    }
-                    */
-
+                    
+                    message.push('All Lines Approved');                    
                 }
 
             }            
