@@ -53,6 +53,7 @@
                     proj.setValue({ fieldId: 'custentity_gcs_install_address_zip_text', value: opp.getValue('custbody_gcs_zipcode') });
 
                     proj.setValue({ fieldId: 'subsidiary', value: opp.getValue('subsidiary') });
+                    proj.setValue({ fieldId: 'currency', value: opp.getValue('currency') });
 
                     // Set project information
                     proj.setValue({ fieldId: 'custentity_gcs_project_snow', value: opp.getValue('custbody_gcs_snow')});
