@@ -55,15 +55,15 @@ define(['N/search', 'N/record'], function (search, record) {
 
       var grade = '';
 
-      if (average >= 0 && average <= 20) {
+      if (average >= 0 && average <= 19.99) {
         grade = 'F';
-      } else if (average > 20 && average <= 35) {
+      } else if (average >= 20 && average <= 34.99) {
         grade = 'D';
-      } else if (average > 35 && average <= 60) {
+      } else if (average >= 35 && average <= 59.99) {
         grade = 'C';
-      } else if (average > 60 && average <= 80) {
+      } else if (average >= 60 && average <= 79.99) {
         grade = 'B';
-      } else if (average > 80) {
+      } else if (average >= 80) {
         grade = 'A';
       }
 
